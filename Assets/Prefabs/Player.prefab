@@ -288,13 +288,23 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CombatInteractor
   ShowTopMostFoldoutHeaderGroup: 1
-  arrowPrefab: {fileID: 7213459659451706802, guid: 3ddf9785c46ea0b4ca80a34da4f58b99, type: 3}
-  shootOrigin: {fileID: 0}
+  animator: {fileID: 0}
   aimCamera: {fileID: 0}
   aimMask:
     serializedVersion: 2
     m_Bits: 4294967295
   aimMaxDistance: 200
+  warriorSlashPrefab: {fileID: 5017964478051023123, guid: 004e1cb1e6d4991499800ddeee447215, type: 3}
+  slashSpawnForward: 1.2
+  slashSpawnUp: 1.1
+  arrowPrefab: {fileID: 7213459659451706802, guid: 3ddf9785c46ea0b4ca80a34da4f58b99, type: 3}
+  shootOrigin: {fileID: 0}
+  minArrowSpeed: 15
+  maxArrowSpeed: 45
+  minArrowLife: 2
+  maxArrowLife: 4
+  chargeMaxTime: 1.2
+  healerBoltPrefab: {fileID: 0}
 --- !u!114 &2840320778924601807
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -9,10 +9,12 @@ public class ArrowProjectile : NetworkBehaviour
     Vector3 targetPos;
     int damage;
 
-    public void InitToTarget(Vector3 targetWorldPos, int dmg)
+    public void InitToTarget(Vector3 targetWorldPos, int dmg, float newSpeed, float newLifeTime)
     {
         targetPos = targetWorldPos;
         damage = dmg;
+        speed = newSpeed;
+        lifeTime = newLifeTime;
     }
 
     public override void OnNetworkSpawn()
@@ -25,10 +27,8 @@ public class ArrowProjectile : NetworkBehaviour
     {
         if (!IsServer) return;
 
-        // 목표 지점으로 이동
         transform.position = Vector3.MoveTowards(transform.position, targetPos, speed * Time.deltaTime);
 
-        // 진행 방향으로 회전
         Vector3 to = targetPos - transform.position;
         if (to.sqrMagnitude > 0.0001f)
             transform.rotation = Quaternion.LookRotation(to);
