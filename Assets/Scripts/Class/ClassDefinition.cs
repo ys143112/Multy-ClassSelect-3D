@@ -1,11 +1,7 @@
 using UnityEngine;
 
-public enum JobType
-{
-    Warrior,
-    Archer,
-    Healer
-}
+public enum JobType { Warrior = 0, Archer = 1, Healer = 2 }
+
 
 [CreateAssetMenu(menuName = "RPG/Class Definition")]
 public class ClassDefinition : ScriptableObject
