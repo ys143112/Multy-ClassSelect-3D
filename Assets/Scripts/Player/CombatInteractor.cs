@@ -1,43 +1,55 @@
 using UnityEngine;
 using Unity.Netcode;
+using System.Collections;
 
 public class CombatInteractor : NetworkBehaviour
 {
     PlayerStats stats;
     PlayerClassState classState;
 
-    [Header("Animation")]
-    public Animator animator;
-    static readonly int HashIsCharging = Animator.StringToHash("IsCharging");
-    static readonly int HashCharge = Animator.StringToHash("Charge");
-    static readonly int HashShoot = Animator.StringToHash("Shoot");
-
     [Header("Aim")]
-    public Camera aimCamera;         // 비워도 됨(자동으로 Camera.main 씀)
+    public Camera aimCamera;                 // 비워도 됨(Owner에서 Camera.main 자동)
     public LayerMask aimMask = ~0;
     public float aimMaxDistance = 200f;
 
-    [Header("Warrior Slash")]
-    public NetworkObject warriorSlashPrefab;
-    public float slashSpawnForward = 1.2f;
-    public float slashSpawnUp = 1.1f;
+    [Header("Shoot Origin")]
+    public Transform shootOrigin;            // 무기/손/활 위치(없으면 임시 계산)
 
-    [Header("Archer")]
-    public NetworkObject arrowPrefab;     // NetworkObject 프리팹
-    public Transform shootOrigin;         // 없으면 자동 계산
+    [Header("Archer - Charge Shot")]
+    public NetworkObject arrowPrefab;        // NetworkObject 프리팹
     public float minArrowSpeed = 18f;
     public float maxArrowSpeed = 35f;
     public float minArrowLife = 2.0f;
     public float maxArrowLife = 4.0f;
-    public float chargeMaxTime = 1.2f;    // 이 시간까지 차지하면 100%
+    public float chargeMaxTime = 1.2f;       // 이 시간까지 차지하면 100%
 
-    [Header("Healer Basic Attack")]
-    public NetworkObject healerBoltPrefab; // 힐러 평타 투사체(없으면 임시로 null 체크됨)
+    [Header("Warrior - Slash Projectile")]
+    public NetworkObject slashPrefab;        // 검기 프리팹(NetworkObject)
+    public float slashSpeed = 40f;
+    public float slashLifeTime = 0.6f;
+
+    [Header("Healer - Basic Attack Projectile")]
+    public NetworkObject healerBoltPrefab;   // 힐러 평타 투사체(NetworkObject)
+    public float healerBoltSpeed = 28f;
+    public float healerBoltLifeTime = 3.0f;
+
+    [Header("Charge Visual (No Animator)")]
+    public Transform chargeVisual;           // 활/손/무기 Transform(당기는 연출)
+    public Vector3 chargeLocalOffset = new Vector3(0f, 0f, -0.12f);
+    public float chargeVisualLerp = 12f;
+
+    [Header("UI - Charge Bar")]
+    public ChargeBarUI chargeBarUI;
+
+    bool hudBound;
+    Coroutine hudBindRoutine;
+
 
     float nextActionTime;
-
     bool isCharging;
     float chargeStartTime;
+    Vector3 chargeVisualBaseLocalPos;
+
 
     void Awake()
     {
@@ -48,7 +60,12 @@ public class CombatInteractor : NetworkBehaviour
     void Start()
     {
         if (!IsOwner) return;
-        if (aimCamera == null) aimCamera = Camera.main;
+
+        if (aimCamera == null)
+            aimCamera = Camera.main;
+
+        if (chargeVisual != null)
+            chargeVisualBaseLocalPos = chargeVisual.localPosition;
     }
 
     void Update()
@@ -57,26 +74,76 @@ public class CombatInteractor : NetworkBehaviour
 
         var job = classState != null ? classState.CurrentJob : JobType.Warrior;
 
+        // 좌클릭
         if (job == JobType.Archer)
         {
-            if (isCharging && animator)
-            {
-                float t = Mathf.Clamp01((Time.time - chargeStartTime) / chargeMaxTime);
-                animator.SetFloat(HashCharge, t);
-            }
-
             if (Input.GetMouseButtonDown(0)) BeginCharge();
             if (Input.GetMouseButtonUp(0)) ReleaseCharge();
+
+            UpdateChargeVisual();
         }
         else
         {
             if (Input.GetMouseButtonDown(0))
-                TryPrimaryInstant(); // 전사/힐러
+                TryPrimaryInstant();
         }
 
+        // 우클릭
         if (Input.GetMouseButtonDown(1))
             TrySecondary();
     }
+
+    public override void OnNetworkSpawn()
+    {
+        if (!IsOwner) return;
+
+        // 씬 전환/재스폰 대비: 이전 루틴 정리
+        if (hudBindRoutine != null)
+            StopCoroutine(hudBindRoutine);
+
+        hudBindRoutine = StartCoroutine(CoBindHUDWhenReady());
+    }
+
+    IEnumerator CoBindHUDWhenReady()
+    {
+        hudBound = false;
+
+        // 1) 씬 로드가 완전히 끝날 때까지 대기
+        // Netcode SceneManager 이벤트를 쓰지 않고도 안전한 방식
+        yield return new WaitUntil(() =>
+            UnityEngine.SceneManagement.SceneManager.GetActiveScene().isLoaded);
+
+        // 2) HUD(Canvas)가 생성될 때까지 대기
+        //    (GameScene에만 ChargeBarUI가 있다고 가정)
+        float timeout = 5f; // 무한 대기 방지
+        float t = 0f;
+
+        while (!hudBound && t < timeout)
+        {
+            // 비활성 포함해서 찾기
+            var hud = FindAnyObjectByType<ChargeBarUI>(FindObjectsInactive.Include);
+
+            if (hud != null)
+            {
+                chargeBarUI = hud;
+                chargeBarUI.SetVisible(false);
+                hudBound = true;
+                break;
+            }
+
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (!hudBound)
+        {
+            Debug.LogWarning("[CombatInteractor] HUD(ChargeBarUI) 바인딩 실패");
+        }
+    }
+
+
+    // -------------------------
+    // Client-side input
 
     void BeginCharge()
     {
@@ -85,33 +152,46 @@ public class CombatInteractor : NetworkBehaviour
         isCharging = true;
         chargeStartTime = Time.time;
 
-        if (animator)
-        {
-            animator.SetBool(HashIsCharging, true);
-            animator.SetFloat(HashCharge, 0f);
-        }
+        if (chargeBarUI != null)
+            chargeBarUI.SetVisible(true);
     }
+
 
     void ReleaseCharge()
     {
         if (!isCharging) return;
         isCharging = false;
 
-        if (animator)
+        if (chargeBarUI != null)
         {
-            animator.SetBool(HashIsCharging, false);
-            animator.SetTrigger(HashShoot);
+            chargeBarUI.SetCharge01(0f);
+            chargeBarUI.SetVisible(false);
         }
 
         if (Time.time < nextActionTime) return;
 
-        float chargeTime = Time.time - chargeStartTime;
-        float charge01 = Mathf.Clamp01(chargeTime / chargeMaxTime);
+        float charge01 = Mathf.Clamp01((Time.time - chargeStartTime) / chargeMaxTime);
 
         nextActionTime = Time.time + (stats != null ? stats.AttackCooldown : 0.5f);
 
         Vector3 aimPoint = GetAimPoint();
         RequestPrimaryRpc(aimPoint, charge01);
+    }
+
+    void AutoBindLocalChargeUI()
+    {
+        // 멀티에서 UI는 "로컬 플레이어"만 잡아야 함
+        if (!IsOwner) return;
+
+        if (chargeBarUI == null)
+        {
+            // 씬에 있는 ChargeBarUI 하나를 찾는다 (Canvas에 1개만 있다고 가정)
+            chargeBarUI = FindAnyObjectByType<ChargeBarUI>(FindObjectsInactive.Include);
+        }
+
+        // 혹시라도 못 찾았으면 조용히 넘어감
+        if (chargeBarUI != null)
+            chargeBarUI.SetVisible(false);
     }
 
     void TryPrimaryInstant()
@@ -120,7 +200,7 @@ public class CombatInteractor : NetworkBehaviour
         nextActionTime = Time.time + (stats != null ? stats.AttackCooldown : 0.5f);
 
         Vector3 aimPoint = GetAimPoint();
-        RequestPrimaryRpc(aimPoint, 0f); // 전사/힐러는 차지 없음
+        RequestPrimaryRpc(aimPoint, 0f);
     }
 
     void TrySecondary()
@@ -130,6 +210,24 @@ public class CombatInteractor : NetworkBehaviour
 
         RequestSecondaryRpc();
     }
+
+    void UpdateChargeVisual()
+    {
+        float t = isCharging ? Mathf.Clamp01((Time.time - chargeStartTime) / chargeMaxTime) : 0f;
+        if (chargeBarUI != null)
+            chargeBarUI.SetCharge01(t);
+
+        // ✅ (옵션) 무기/손 당기는 연출(너가 이미 쓰던 것)
+        if (chargeVisual != null)
+        {
+            Vector3 targetLocal = chargeVisualBaseLocalPos + chargeLocalOffset * t;
+            chargeVisual.localPosition = Vector3.Lerp(chargeVisual.localPosition, targetLocal, Time.deltaTime * chargeVisualLerp);
+        }
+    }
+
+
+    // -------------------------
+    // Aim helpers (client)
 
     Vector3 GetAimPoint()
     {
@@ -144,7 +242,33 @@ public class CombatInteractor : NetworkBehaviour
         return ray.GetPoint(aimMaxDistance);
     }
 
-    // ✅ aimPoint + charge01 서버로 전달
+    // -------------------------
+    // Server-side occlusion fix (camera 없는 서버에서도 가능)
+    // "클라가 보낸 aimPoint"를 기준으로, 무기 원점에서 레이 쏴서
+    // 중간에 벽이 있으면 거기로 aimPoint를 당김
+    Vector3 FixAimPointFromOrigin(Vector3 origin, Vector3 desiredAimPoint)
+    {
+        Vector3 dir = desiredAimPoint - origin;
+        float dist = dir.magnitude;
+        if (dist < 0.01f) return desiredAimPoint;
+
+        dir /= dist;
+
+        if (Physics.Raycast(origin, dir, out RaycastHit hit, dist, aimMask, QueryTriggerInteraction.Ignore))
+            return hit.point;
+
+        return desiredAimPoint;
+    }
+
+    Vector3 GetOriginPos()
+    {
+        if (shootOrigin != null) return shootOrigin.position;
+        return transform.position + transform.forward * 1.0f + Vector3.up * 1.2f;
+    }
+
+    // -------------------------
+    // RPCs
+
     [Rpc(SendTo.Server)]
     void RequestPrimaryRpc(Vector3 aimPoint, float charge01, RpcParams rpcParams = default)
     {
@@ -153,16 +277,15 @@ public class CombatInteractor : NetworkBehaviour
         switch (job)
         {
             case JobType.Warrior:
-                ServerMeleeAttack();                 // 전사 평타(근접)
                 ServerWarriorSlash(aimPoint);
                 break;
 
             case JobType.Archer:
-                ServerShootArrow(aimPoint, charge01); // 아처 차지샷
+                ServerShootArrow(aimPoint, charge01);
                 break;
 
             case JobType.Healer:
-                ServerHealerBasicAttack(aimPoint);    // 힐러 평타(공격 투사체)
+                ServerHealerBasicAttack(aimPoint);
                 break;
         }
     }
@@ -172,107 +295,86 @@ public class CombatInteractor : NetworkBehaviour
     {
         var job = classState != null ? classState.CurrentJob : JobType.Warrior;
 
-        // 우클릭: 힐러 힐(기존 컨셉 유지)
         if (job == JobType.Healer)
             ServerHealNearest(12);
     }
 
     // -------------------------
-    // Warrior: 근접 평타(기존)
-    void ServerMeleeAttack()
-    {
-        float range = stats.AttackRange;
-        int dmg = stats.Atk;
-
-        foreach (var enemy in FindObjectsByType<EnemyStats>(FindObjectsSortMode.None))
-        {
-            float d = Vector3.Distance(transform.position, enemy.transform.position);
-            if (d <= range)
-            {
-                enemy.TakeDamage(dmg);
-                break;
-            }
-        }
-    }
+    // Server: Warrior slash (aimPoint로)
 
     void ServerWarriorSlash(Vector3 aimPoint)
     {
-        if (warriorSlashPrefab == null) return;
+        if (slashPrefab == null) return;
 
         int dmg = Mathf.Max(1, stats != null ? stats.Atk : 1);
 
-        Vector3 originPos = transform.position + transform.forward * slashSpawnForward + Vector3.up * slashSpawnUp;
+        Vector3 originPos = GetOriginPos();
+        Vector3 aimFixed = FixAimPointFromOrigin(originPos, aimPoint);
 
-        Vector3 to = (aimPoint - originPos);
-        to.y = 0f; // 검기는 보통 수평으로
+        Vector3 to = aimFixed - originPos;
         if (to.sqrMagnitude < 0.001f) to = transform.forward;
 
-        var obj = Instantiate(warriorSlashPrefab, originPos, Quaternion.LookRotation(to));
+        var obj = Instantiate(slashPrefab, originPos, Quaternion.LookRotation(to));
         obj.Spawn(true);
 
-        var slash = obj.GetComponent<WarriorSlashProjectile>();
+        var slash = obj.GetComponent<SlashProjectile>();
         if (slash != null)
-            slash.Init(to, dmg);
-    }
-
-
-    // -------------------------
-    // Healer: 공격 평타(투사체)
-    void ServerHealerBasicAttack(Vector3 aimPoint)
-    {
-        if (healerBoltPrefab == null) return;
-
-        int dmg = Mathf.Max(1, stats != null ? stats.Atk : 1);
-
-        Vector3 originPos = (shootOrigin != null)
-            ? shootOrigin.position
-            : transform.position + transform.forward * 1.0f + Vector3.up * 1.2f;
-
-        Vector3 to = aimPoint - originPos;
-        if (to.sqrMagnitude < 0.001f) to = transform.forward;
-
-        var boltObj = Instantiate(healerBoltPrefab, originPos, Quaternion.LookRotation(to));
-        boltObj.Spawn(true);
-
-        // healerBoltPrefab에 ArrowProjectile을 재사용해도 됨(“타겟으로 날아가는 마법탄”)
-        var proj = boltObj.GetComponent<ArrowProjectile>();
-        if (proj != null)
-        {
-            proj.InitToTarget(aimPoint, dmg, 28f, 3.0f);
-        }
+            slash.InitToTarget(aimFixed, dmg, slashSpeed, slashLifeTime);
     }
 
     // -------------------------
-    // Archer: 차지샷(속도/수명/데미지 스케일)
+    // Server: Archer charge shot (aimPoint + charge01)
+
     void ServerShootArrow(Vector3 aimPoint, float charge01)
     {
         if (arrowPrefab == null) return;
 
         int baseDmg = Mathf.Max(1, stats != null ? stats.Atk : 1);
 
-        // 차지 스케일(원하면 여기만 바꿔도 손맛 크게 바뀜)
         float speed = Mathf.Lerp(minArrowSpeed, maxArrowSpeed, charge01);
         float life = Mathf.Lerp(minArrowLife, maxArrowLife, charge01);
-
-        // 데미지도 살짝 증가(예: 1.0x ~ 1.8x)
         int dmg = Mathf.RoundToInt(baseDmg * Mathf.Lerp(1.0f, 1.8f, charge01));
 
-        Vector3 originPos = (shootOrigin != null)
-            ? shootOrigin.position
-            : transform.position + transform.forward * 1.0f + Vector3.up * 1.2f;
+        Vector3 originPos = GetOriginPos();
+        Vector3 aimFixed = FixAimPointFromOrigin(originPos, aimPoint);
 
-        Vector3 to = aimPoint - originPos;
+        Vector3 to = aimFixed - originPos;
         if (to.sqrMagnitude < 0.001f) to = transform.forward;
 
-        var arrowObj = Instantiate(arrowPrefab, originPos, Quaternion.LookRotation(to));
-        arrowObj.Spawn(true);
+        var obj = Instantiate(arrowPrefab, originPos, Quaternion.LookRotation(to));
+        obj.Spawn(true);
 
-        var arrow = arrowObj.GetComponent<ArrowProjectile>();
+        var arrow = obj.GetComponent<ArrowProjectile>();
         if (arrow != null)
-        {
-            arrow.InitToTarget(aimPoint, dmg, speed, life);
-        }
+            arrow.InitToTarget(aimFixed, dmg, speed, life);
     }
+
+    // -------------------------
+    // Server: Healer basic attack projectile (aimPoint로)
+
+    void ServerHealerBasicAttack(Vector3 aimPoint)
+    {
+        if (healerBoltPrefab == null) return;
+
+        int dmg = Mathf.Max(1, stats != null ? stats.Atk : 1);
+
+        Vector3 originPos = GetOriginPos();
+        Vector3 aimFixed = FixAimPointFromOrigin(originPos, aimPoint);
+
+        Vector3 to = aimFixed - originPos;
+        if (to.sqrMagnitude < 0.001f) to = transform.forward;
+
+        var obj = Instantiate(healerBoltPrefab, originPos, Quaternion.LookRotation(to));
+        obj.Spawn(true);
+
+        // 힐러탄도 ArrowProjectile 재사용 가능
+        var proj = obj.GetComponent<ArrowProjectile>();
+        if (proj != null)
+            proj.InitToTarget(aimFixed, dmg, healerBoltSpeed, healerBoltLifeTime);
+    }
+
+    // -------------------------
+    // Server: Healer secondary heal
 
     void ServerHealNearest(int amount)
     {
