@@ -11,6 +11,7 @@ public class ClassSelectUIController : MonoBehaviour
     [Header("UI")]
     public TMP_Text nameText;
     public TMP_Text statText;
+    public TMP_Text descText;   // ✅ 직업 설명 UI 추가
 
     private JobType current = JobType.Warrior;
 
@@ -25,9 +26,12 @@ public class ClassSelectUIController : MonoBehaviour
     void Start()
     {
         Debug.Log("[UI] ClassSelectUIController Start");
-        Preview(current);
-        QueueSend(current);
+
+        // ✅ 시작값도 Select로 통일(프리뷰/캐시/전송대기까지 한 번에)
+        Select(current);
     }
+
+    public void ClickWarrior() => Select(JobType.Warrior);
 
     public void ClickArcher()
     {
@@ -35,19 +39,21 @@ public class ClassSelectUIController : MonoBehaviour
         Select(JobType.Archer);
     }
 
-
-    public void ClickWarrior() => Select(JobType.Warrior);
-    //public void ClickArcher() => Select(JobType.Archer);
     public void ClickHealer() => Select(JobType.Healer);
 
     void Select(JobType job)
     {
         current = job;
-        SelectedJobCache.Selected = job;   // ✅ 저장
-        Preview(job);
-        // TrySendSelection(job);  // ❌ 여기서 보내지 말기
-    }
 
+        // ✅ 로컬 선택 저장 (GameScene에서 스폰 시 적용됨)
+        SelectedJobCache.Selected = job;
+
+        // ✅ UI 미리보기(이름/스탯/설명)
+        Preview(job);
+
+        // ✅ 네트워크 준비되면 서버로도 반영 시도(가능한 경우)
+        QueueSend(job);
+    }
 
     void Preview(JobType job)
     {
@@ -55,6 +61,7 @@ public class ClassSelectUIController : MonoBehaviour
         if (def == null) return;
 
         if (nameText) nameText.text = def.displayName;
+
         if (statText)
         {
             statText.text =
@@ -62,6 +69,10 @@ public class ClassSelectUIController : MonoBehaviour
                 $"ATK: {def.baseAtk}\n" +
                 $"SPD: {def.moveSpeed}";
         }
+
+        // ✅ 직업 설명 출력 (ClassDefinition에 description 필드 필요)
+        if (descText)
+            descText.text = def.description;
     }
 
     void QueueSend(JobType job)
@@ -85,28 +96,25 @@ public class ClassSelectUIController : MonoBehaviour
                NetworkManager.Singleton.LocalClient.PlayerObject == null)
             yield return null;
 
-        // 여기까지 오면 이제 보낼 수 있음
-        if (pendingSend)
+        // PlayerClassState 스폰 대기 (IsSpawned까지)
+        while (true)
         {
-            pendingSend = false;
-
             var playerObj = NetworkManager.Singleton.LocalClient.PlayerObject;
             var state = playerObj.GetComponent<PlayerClassState>();
 
-            Debug.Log($"[UI] Sending job={(int)current} to PlayerClassState. " +
-                      $"playerObj={playerObj.name}, state={(state ? "OK" : "NULL")}");
+            if (pendingSend && state != null && state.NetworkObject != null && state.NetworkObject.IsSpawned)
+            {
+                pendingSend = false;
 
-            if (state != null && state.NetworkObject != null && state.NetworkObject.IsSpawned)
-            {
+                Debug.Log($"[UI] Sending job={(int)current} to PlayerClassState. " +
+                          $"playerObj={playerObj.name}, state=OK");
+
                 state.RequestSetJobRpc((int)current);
+                break;
             }
-            else
-            {
-                Debug.LogWarning("[UI] PlayerClassState not spawned yet. Will retry.");
-                pendingSend = true;
-                yield return null;
-                StartCoroutine(CoTrySendWhenReady());
-            }
+
+            // 아직 못 보내는 상태면 계속 대기
+            yield return null;
         }
 
         sending = false;

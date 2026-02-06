@@ -41,6 +41,9 @@ public class CombatInteractor : NetworkBehaviour
     [Header("UI - Charge Bar")]
     public ChargeBarUI chargeBarUI;
 
+    [Header("UI - Crosshair")]
+    public CrosshairUI crosshairUI;
+
     bool hudBound;
     Coroutine hudBindRoutine;
 
@@ -108,36 +111,42 @@ public class CombatInteractor : NetworkBehaviour
     {
         hudBound = false;
 
-        // 1) 씬 로드가 완전히 끝날 때까지 대기
-        // Netcode SceneManager 이벤트를 쓰지 않고도 안전한 방식
+        // 1) 활성 씬 로드 완료 대기
         yield return new WaitUntil(() =>
             UnityEngine.SceneManagement.SceneManager.GetActiveScene().isLoaded);
 
-        // 2) HUD(Canvas)가 생성될 때까지 대기
-        //    (GameScene에만 ChargeBarUI가 있다고 가정)
-        float timeout = 5f; // 무한 대기 방지
-        float t = 0f;
+        float timeout = 5f;
+        float elapsed = 0f;
 
-        while (!hudBound && t < timeout)
+        while (!hudBound && elapsed < timeout)
         {
-            // 비활성 포함해서 찾기
-            var hud = FindAnyObjectByType<ChargeBarUI>(FindObjectsInactive.Include);
+            // 비활성 포함해서 찾기 (GameScene HUD에만 존재한다고 가정)
+            if (chargeBarUI == null)
+                chargeBarUI = FindAnyObjectByType<ChargeBarUI>(FindObjectsInactive.Include);
 
-            if (hud != null)
+            if (crosshairUI == null)
+                crosshairUI = FindAnyObjectByType<CrosshairUI>(FindObjectsInactive.Include);
+
+            // 둘 다 준비되면 바인딩 완료
+            if (chargeBarUI != null && crosshairUI != null)
             {
-                chargeBarUI = hud;
+                // 초기 상태 세팅
                 chargeBarUI.SetVisible(false);
+                crosshairUI.SetCharge01(0f);   // 기본 크기/색으로
+
                 hudBound = true;
                 break;
             }
 
-            t += Time.unscaledDeltaTime;
+            elapsed += Time.unscaledDeltaTime;
             yield return null;
         }
 
         if (!hudBound)
         {
-            Debug.LogWarning("[CombatInteractor] HUD(ChargeBarUI) 바인딩 실패");
+            Debug.LogWarning($"[CombatInteractor] HUD 바인딩 실패 " +
+                             $"chargeBarUI={(chargeBarUI ? "OK" : "NULL")} " +
+                             $"crosshairUI={(crosshairUI ? "OK" : "NULL")}");
         }
     }
 
@@ -216,6 +225,9 @@ public class CombatInteractor : NetworkBehaviour
         float t = isCharging ? Mathf.Clamp01((Time.time - chargeStartTime) / chargeMaxTime) : 0f;
         if (chargeBarUI != null)
             chargeBarUI.SetCharge01(t);
+        if (crosshairUI != null)
+            crosshairUI.SetCharge01(t);
+
 
         // ✅ (옵션) 무기/손 당기는 연출(너가 이미 쓰던 것)
         if (chargeVisual != null)
@@ -346,7 +358,7 @@ public class CombatInteractor : NetworkBehaviour
 
         var arrow = obj.GetComponent<ArrowProjectile>();
         if (arrow != null)
-            arrow.InitToTarget(aimFixed, dmg, speed, life);
+            arrow.InitToTarget(aimFixed, dmg, speed, life, OwnerClientId);
     }
 
     // -------------------------
@@ -370,7 +382,7 @@ public class CombatInteractor : NetworkBehaviour
         // 힐러탄도 ArrowProjectile 재사용 가능
         var proj = obj.GetComponent<ArrowProjectile>();
         if (proj != null)
-            proj.InitToTarget(aimFixed, dmg, healerBoltSpeed, healerBoltLifeTime);
+            proj.InitToTarget(aimFixed, dmg, healerBoltSpeed, healerBoltLifeTime, OwnerClientId);
     }
 
     // -------------------------

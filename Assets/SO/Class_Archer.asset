@@ -14,6 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ClassDefinition
   id: 1
   displayName: Archer
-  baseHp: 50
-  baseAtk: 20
-  moveSpeed: 5
+  description: "\uD0C0 \uC804\uC9C1\uC5D0 \uBE44\uD574 \uC774\uB3D9\uC18D\uB3C4\uAC00
+    \uBE60\uB974\uBA70 \uACF5\uACA9\uB825\uC774 \uB192\uC740 \uB51C\uB7EC \uC9C1\uC5C5.
+    \uBAB8\uC774 \uC57D\uD574\uC11C \uC801\uC758 \uACF5\uACA9\uC740 \uD53C\uD558\uACE0
+    \uB0B4 \uACF5\uACA9\uC740 \uB9DE\uCDB0\uC57C \uD558\uB294 \uACE0\uB09C\uC774\uB3C4
+    \uC9C1\uC5C5. "
+  baseHp: 40
+  baseAtk: 25
+  moveSpeed: 8
