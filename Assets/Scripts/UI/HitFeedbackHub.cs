@@ -15,7 +15,7 @@ public class HitFeedbackHub : MonoBehaviour
 
     [Header("Camera Shake")]
     public float shakeDuration = 0.08f;         // 초(언스케일드)
-    public float shakeStrength = 0.06f;         // 카메라 흔들림 강도
+    public float shakeStrength = 0.6f;         // 카메라 흔들림 강도
     public float shakeFrequency = 45f;          // 흔들림 속도
 
     [Header("Crosshair Punch")]

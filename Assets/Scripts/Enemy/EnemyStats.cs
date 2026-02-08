@@ -6,6 +6,9 @@ public class EnemyStats : NetworkBehaviour
     public NetworkVariable<int> Hp =
         new(30, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    EnemySpawner spawner;
+    int spawnIndex = -1;
+
     public override void OnNetworkSpawn()
     {
         if (!IsServer) return;
@@ -24,9 +27,22 @@ public class EnemyStats : NetworkBehaviour
             Die();
     }
 
+    public void ServerInitSpawner(EnemySpawner ownerSpawner, int index)
+    {
+        if (!IsServer) return;
+        spawner = ownerSpawner;
+        spawnIndex = index;
+    }
+
     void Die()
     {
         if (!IsServer) return;
+
+        // ✅ 먼저 리스폰 예약
+        if (spawner != null && spawnIndex >= 0)
+            spawner.ServerOnEnemyDied(spawnIndex);
+
+        // ✅ 그리고 디스폰
         NetworkObject.Despawn();
     }
 
