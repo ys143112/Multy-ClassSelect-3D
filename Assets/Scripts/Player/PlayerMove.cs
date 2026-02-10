@@ -71,16 +71,21 @@ public class PlayerMove : NetworkBehaviour
         {
             if (jumpsUsed < maxJumps)
             {
-                float hgt = (jumpsUsed == 0) ? jumpHeight : doubleJumpHeight;
+                bool isFirstJump = (jumpsUsed == 0);
+                float hgt = isFirstJump ? jumpHeight : doubleJumpHeight;
 
                 if (yVel < 0f) yVel = 0f;
                 yVel = Mathf.Sqrt(hgt * -2f * gravity);
                 jumpsUsed++;
 
-                // ✅ 점프 트리거
-                if (animator) animator.SetTrigger(AnimJumpTrig);
+                if (animator)
+                {
+                    if (isFirstJump) animator.SetTrigger("Jump");
+                    else animator.SetTrigger("DoubleJump");
+                }
             }
         }
+
 
         // 중력
         yVel += gravity * Time.deltaTime;
