@@ -22,6 +22,8 @@ GameObject:
   - component: {fileID: -104308436107137899}
   - component: {fileID: 2840320778924601807}
   - component: {fileID: 4540075464349899486}
+  - component: {fileID: -4328203047340602488}
+  - component: {fileID: 2320107394662528245}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -211,8 +213,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMove
   ShowTopMostFoldoutHeaderGroup: 1
-  speed: 5
+  walkSpeed: 5
+  runMultiplier: 1.6
+  airControl: 0.6
   gravity: -20
+  jumpHeight: 1.25
+  maxJumps: 2
+  doubleJumpHeight: 1.1
 --- !u!114 &623929701707969724
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -310,6 +317,8 @@ MonoBehaviour:
   chargeVisual: {fileID: 7145555674714733148}
   chargeLocalOffset: {x: 0, y: 0, z: -0.12}
   chargeVisualLerp: 30
+  chargeBarUI: {fileID: 0}
+  crosshairUI: {fileID: 0}
 --- !u!114 &2840320778924601807
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -342,6 +351,48 @@ MonoBehaviour:
   minPitch: -35
   maxPitch: 60
   followSmooth: 18
+--- !u!95 &-4328203047340602488
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1908604454261259482}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: f1c3c7a0ab0168049818f59afdd99e59, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &2320107394662528245
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1908604454261259482}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8d0727d5ae3244e3b569694d3912374, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.Components.NetworkAnimator
+  ShowTopMostFoldoutHeaderGroup: 1
+  NetworkAnimatorExpanded: 0
+  AuthorityMode: 0
+  m_Animator: {fileID: -4328203047340602488}
+  TransitionStateInfoList: []
+  AnimatorParameterEntries:
+    ParameterEntries: []
+  AnimatorParametersExpanded: 0
 --- !u!1 &2627858111779418315
 GameObject:
   m_ObjectHideFlags: 0

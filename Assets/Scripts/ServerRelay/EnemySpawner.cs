@@ -5,22 +5,35 @@ using Unity.Netcode;
 
 public class EnemySpawner : NetworkBehaviour
 {
-    public EnemyAI enemyPrefab;
+    [Header("Prefab (NetworkObject 포함 프리팹)")]
+    [SerializeField] private NetworkObject enemyPrefab;
 
     [Header("Spawn Settings")]
     public int initialCount = 3;
     public float respawnDelay = 3f;
 
     // 스폰 위치 저장(죽으면 여기로 다시 스폰)
-    readonly List<Vector3> spawnPoints = new();
-    readonly Dictionary<ulong, int> enemyToSpawnIndex = new(); // enemyNetworkId -> spawnIndex
+    private readonly List<Vector3> spawnPoints = new();
+
+    // ✅ 서버에서 1회만 초기 스폰하도록 가드
+    private bool didInitialSpawn;
 
     public override void OnNetworkSpawn()
     {
         if (!IsServer) return;
 
+        // ✅ 혹시라도 OnNetworkSpawn가 재호출되거나
+        // 씬 리로드/재스폰 등으로 중복 실행되는 상황 방지
+        if (didInitialSpawn) return;
+        didInitialSpawn = true;
+
+        if (enemyPrefab == null)
+        {
+            Debug.LogError("[EnemySpawner] enemyPrefab이 비어있음. NetworkObject 프리팹을 할당하세요.");
+            return;
+        }
+
         spawnPoints.Clear();
-        enemyToSpawnIndex.Clear();
 
         for (int i = 0; i < initialCount; i++)
         {
@@ -30,24 +43,22 @@ public class EnemySpawner : NetworkBehaviour
         }
     }
 
-    void SpawnEnemyAtIndex(int index)
+    private void SpawnEnemyAtIndex(int index)
     {
         if (!IsServer) return;
         if (index < 0 || index >= spawnPoints.Count) return;
 
         Vector3 pos = spawnPoints[index];
 
-        var enemy = Instantiate(enemyPrefab, pos, Quaternion.identity);
-        var netObj = enemy.GetComponent<NetworkObject>();
-        netObj.Spawn(true);
+        NetworkObject enemyNetObj = Instantiate(enemyPrefab, pos, Quaternion.identity);
+
+        // ✅ 서버가 소유(기본값)로 Spawn
+        enemyNetObj.Spawn();
 
         // EnemyStats에 스포너 정보 주입
-        var stats = enemy.GetComponent<EnemyStats>();
+        var stats = enemyNetObj.GetComponent<EnemyStats>();
         if (stats != null)
             stats.ServerInitSpawner(this, index);
-
-        // 추적용(선택)
-        enemyToSpawnIndex[netObj.NetworkObjectId] = index;
     }
 
     // EnemyStats가 서버에서 호출하는 콜백
@@ -57,7 +68,7 @@ public class EnemySpawner : NetworkBehaviour
         StartCoroutine(CoRespawn(spawnIndex));
     }
 
-    IEnumerator CoRespawn(int spawnIndex)
+    private IEnumerator CoRespawn(int spawnIndex)
     {
         yield return new WaitForSeconds(respawnDelay);
         SpawnEnemyAtIndex(spawnIndex);

@@ -694,7 +694,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
   ShowTopMostFoldoutHeaderGroup: 1
-  enemyPrefab: {fileID: -6491500534037525644, guid: 0f5f50dfb76de7744b2d75e221e92e11, type: 3}
+  enemyPrefab: {fileID: 4402214919140961536, guid: 0f5f50dfb76de7744b2d75e221e92e11, type: 3}
+  initialCount: 3
+  respawnDelay: 3
 --- !u!114 &1199792876
 MonoBehaviour:
   m_ObjectHideFlags: 0

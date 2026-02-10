@@ -14,20 +14,34 @@ public class PlayerMove : NetworkBehaviour
     public float jumpHeight = 1.25f;
 
     [Header("Double Jump")]
-    public int maxJumps = 2;              // 2면 더블점프(총 2번)
-    public float doubleJumpHeight = 1.1f; // 2번째 점프 높이(조금 낮게 추천)
+    public int maxJumps = 2;
+    public float doubleJumpHeight = 1.1f;
+
+    [Header("Animation")]
+    public Animator animator; // 비워도 GetComponentInChildren로 자동 바인딩
 
     CharacterController cc;
     float yVel;
     int jumpsUsed;
 
-    void Awake() => cc = GetComponent<CharacterController>();
+    // Animator hashes (오타 방지 + 성능)
+    static readonly int AnimSpeed = Animator.StringToHash("Speed");
+    static readonly int AnimGrounded = Animator.StringToHash("Grounded");
+    static readonly int AnimRunning = Animator.StringToHash("Running");
+    static readonly int AnimYVel = Animator.StringToHash("YVel");
+    static readonly int AnimJumpTrig = Animator.StringToHash("Jump");
+
+    void Awake()
+    {
+        cc = GetComponent<CharacterController>();
+        if (animator == null) animator = GetComponentInChildren<Animator>();
+    }
 
     public override void OnNetworkSpawn()
     {
         if (!IsOwner)
         {
-            enabled = false;
+            enabled = false; // 이동 입력은 로컬만
             return;
         }
     }
@@ -48,9 +62,7 @@ public class PlayerMove : NetworkBehaviour
         // 지면 처리
         if (cc.isGrounded)
         {
-            // 바닥에 닿으면 점프 횟수 리셋
             jumpsUsed = 0;
-
             if (yVel < 0f) yVel = -2f;
         }
 
@@ -59,14 +71,14 @@ public class PlayerMove : NetworkBehaviour
         {
             if (jumpsUsed < maxJumps)
             {
-                bool isFirstJump = (jumpsUsed == 0);
-                float hgt = isFirstJump ? jumpHeight : doubleJumpHeight;
+                float hgt = (jumpsUsed == 0) ? jumpHeight : doubleJumpHeight;
 
-                // 점프 시작 시 하강 중이면 yVel 리셋(공중에서 2단 점프할 때 답답함 방지)
                 if (yVel < 0f) yVel = 0f;
-
                 yVel = Mathf.Sqrt(hgt * -2f * gravity);
                 jumpsUsed++;
+
+                // ✅ 점프 트리거
+                if (animator) animator.SetTrigger(AnimJumpTrig);
             }
         }
 
@@ -76,9 +88,18 @@ public class PlayerMove : NetworkBehaviour
         // 공중 제어
         float control = cc.isGrounded ? 1f : airControl;
         Vector3 planarVel = inputMove * (targetSpeed * control);
-
         Vector3 vel = planarVel + Vector3.up * yVel;
         cc.Move(vel * Time.deltaTime);
+
+        // ✅ 애니 파라미터 업데이트(매 프레임)
+        if (animator)
+        {
+            float speed01 = Mathf.Clamp01(planarVel.magnitude / (walkSpeed * runMultiplier)); // 0~1
+            animator.SetFloat(AnimSpeed, speed01, 0.08f, Time.deltaTime);
+            animator.SetBool(AnimRunning, run && inputMove.sqrMagnitude > 0.01f);
+            animator.SetBool(AnimGrounded, cc.isGrounded);
+            animator.SetFloat(AnimYVel, yVel);
+        }
     }
 
     public void SetSpeed(float s) => walkSpeed = s;
