@@ -24,12 +24,22 @@ public class HitFeedbackHub : MonoBehaviour
             cam = Camera.main;
     }
 
-    // 🔥 맞았을 때 호출
+    // ============================
+    // ✅ 최신 API: "맞았을 때" (hitWorldPos 포함)
+    // ============================
     public void PlayGotHit(float intensity01, Vector3 hitWorldPos)
     {
         if (cam == null) return;
-
         StartCoroutine(CoShake(intensity01));
+    }
+
+    // ============================
+    // ✅ 호환 API: EnemyStats가 부르는 기존 함수명
+    // ============================
+    public void PlayHitFeedback(float intensity01)
+    {
+        // 위치 정보가 없으면 그냥 흔들기만
+        PlayGotHit(intensity01, Vector3.zero);
     }
 
     IEnumerator CoShake(float intensity01)
@@ -41,9 +51,7 @@ public class HitFeedbackHub : MonoBehaviour
 
         while (elapsed < shakeTime)
         {
-            cam.transform.localPosition =
-                basePos + Random.insideUnitSphere * strength;
-
+            cam.transform.localPosition = basePos + Random.insideUnitSphere * strength;
             elapsed += Time.deltaTime;
             yield return null;
         }
