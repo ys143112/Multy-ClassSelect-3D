@@ -66,9 +66,6 @@ public class ArrowProjectile : NetworkBehaviour
         // 데미지
         enemy.TakeDamage(damage);
 
-        // ✅ 맞춘 사람(소유자)에게만 히트 피드백
-        enemy.ServerNotifyHitFeedback(ownerId, 1f);
-
         ServerDespawn();
     }
 
